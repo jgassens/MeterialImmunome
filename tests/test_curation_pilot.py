@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from curation_pilot import db, exports, metrics
+from curation_pilot import db, exports, metrics, validation
 
 
 def make_conn(tmp_path: Path, *, seed_demo: bool = True):
@@ -47,6 +47,13 @@ def test_demo_rows_are_excluded_from_metrics_and_exports_by_default(tmp_path: Pa
         assert demo_metrics.loc[
             demo_metrics["metric"] == "paired_claim_slots", "value"
         ].iloc[0] == 2
+        assert exports.export_summary(conn) == {
+            "exported_records": 0,
+            "adjudicated_records": 0,
+            "raw_annotation_records": 0,
+            "demo_records_in_export": 0,
+            "demo_records_excluded": 4,
+        }
     finally:
         conn.close()
 
@@ -162,6 +169,74 @@ def test_annotation_adjudication_and_export_shape(tmp_path: Path) -> None:
         assert metric_frame.loc[
             metric_frame["metric"] == "agreement_direction", "value"
         ].iloc[0] == 0.0
+    finally:
+        conn.close()
+
+
+def test_validation_and_completeness_helpers_flag_missing_core_fields() -> None:
+    record = {
+        "curator": "JG",
+        "endpoint_family": "inflammasome activation",
+        "direction": "increased",
+        "confidence": "medium",
+        "evidence_location": "Fig. 2A",
+        "dose": "",
+        "comparator": "LPS only",
+        "material_form": "hydroxide",
+        "speciation_or_oxidation_state": "",
+        "assay": "",
+        "specific_endpoint": "",
+        "missing_core_fields": "dose missing; speciation missing",
+    }
+
+    errors, warnings = validation.validate_claim_record(record)
+    complete = validation.completeness_df(record)
+
+    assert errors == []
+    assert "assay is blank but `assay unclear` is not selected." in warnings
+    assert complete.loc[complete["field"] == "Dose", "status"].iloc[0] == (
+        "explicitly missing"
+    )
+    assert complete.loc[complete["field"] == "Assay", "status"].iloc[0] == (
+        "needs review"
+    )
+
+
+def test_reset_demo_data_preserves_manual_rows(tmp_path: Path) -> None:
+    conn = make_conn(tmp_path)
+    try:
+        db.upsert_paper(
+            conn,
+            {
+                "paper_id": "P777",
+                "title": "Manual paper",
+                "metal_cluster": "zinc",
+                "paper_type": "primary study",
+                "full_text_available": "yes",
+                "status": "curated",
+            },
+        )
+        db.reset_demo_data(conn)
+        papers = db.table_df(conn, "papers")
+
+        assert "P777" in papers["paper_id"].tolist()
+        assert len(papers[papers["source_type"] == "demo_fixture"]) == 2
+    finally:
+        conn.close()
+
+
+def test_claim_comparison_marks_disagreements(tmp_path: Path) -> None:
+    conn = make_conn(tmp_path)
+    try:
+        annotations = db.table_df(conn, "annotations")
+        slot_annotations = annotations[annotations["claim_id"] == "D001-C002"]
+        comparison = metrics.claim_comparison_df(slot_annotations)
+
+        endpoint_row = comparison[comparison["field"] == "endpoint_family"].iloc[0]
+        dose_row = comparison[comparison["field"] == "dose_present"].iloc[0]
+
+        assert bool(endpoint_row["disagreement"]) is True
+        assert bool(dose_row["disagreement"]) is False
     finally:
         conn.close()
 

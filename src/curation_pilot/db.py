@@ -70,6 +70,7 @@ def connect(db_path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -486,3 +487,13 @@ def seed_demo_data(conn: sqlite3.Connection) -> None:
         },
     )
 
+
+def reset_demo_data(conn: sqlite3.Connection) -> None:
+    """Delete and reseed demo fixtures without touching manual curation rows."""
+    for table in ["adjudications", "annotations", "claim_slots", "papers"]:
+        conn.execute(
+            f"DELETE FROM {table} WHERE demo = 1 OR source_type = 'demo_fixture'"
+        )
+    conn.commit()
+    seed_demo_data(conn)
+    conn.commit()

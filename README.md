@@ -212,11 +212,23 @@ The Streamlit app has five tabs:
 
 - **Papers**: create and update paper registry records.
 - **Claim Slots**: create deterministic shared claim IDs such as `P001-C003`.
-- **Annotate**: enter one curator annotation per shared claim slot.
-- **Adjudicate**: review paired disagreements and save final values.
-- **Metrics + Export**: download `curated_claim_records.csv` and `pilot_metrics.csv`.
+- **Annotate**: enter one curator annotation per shared claim slot, with validation and a completeness panel for dose, comparator, material form, speciation, assay, and evidence location.
+- **Adjudicate**: review paired disagreements in a curator comparison table and save final values.
+- **Metrics + Export**: review export sanity checks, then download `curated_claim_records.csv` and `pilot_metrics.csv`.
 
 Exports use adjudicated records when available. If a claim slot has not been adjudicated yet, the export includes raw annotation records instead.
+
+The **Metrics + Export** tab also includes a demo utility that deletes and reseeds only rows marked as demo fixtures. It does not touch manual curation rows.
+
+## Development Checks
+
+Run the local test suite before pushing changes:
+
+```bash
+.venv/bin/python -m pytest
+```
+
+GitHub Actions also runs `pytest` on pushes to `main` and on pull requests.
 
 ## Acceptance Criteria for v1
 

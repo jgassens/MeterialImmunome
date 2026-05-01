@@ -12,7 +12,7 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from curation_pilot import db, exports, metrics  # noqa: E402
+from curation_pilot import db, exports, metrics, validation  # noqa: E402
 from curation_pilot.vocab import (  # noqa: E402
     CLAIM_FIELDS,
     CONFIDENCE_LEVELS,
@@ -72,6 +72,38 @@ def dataframe_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     if frame.empty:
         return []
     return frame.fillna("").to_dict("records")
+
+
+def flash(level: str, message: str) -> None:
+    st.session_state.setdefault("flash_messages", []).append((level, message))
+
+
+def render_flash() -> None:
+    messages = st.session_state.pop("flash_messages", [])
+    for level, message in messages:
+        if level == "success":
+            st.success(message)
+        elif level == "warning":
+            st.warning(message)
+        elif level == "error":
+            st.error(message)
+        else:
+            st.info(message)
+
+
+def render_validation_feedback(errors: list[str], warnings: list[str]) -> None:
+    for error in errors:
+        st.error(error)
+    for warning in warnings:
+        st.warning(warning)
+
+
+def flash_validation_feedback(
+    success_message: str, warnings: list[str] | None = None
+) -> None:
+    flash("success", success_message)
+    for warning in warnings or []:
+        flash("warning", warning)
 
 
 def get_row(frame: pd.DataFrame, key: str, value: str) -> dict[str, Any]:
@@ -229,6 +261,26 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
     return values
 
 
+def render_completeness_panel(record: dict[str, Any]) -> None:
+    st.caption("Completeness check")
+    st.dataframe(
+        validation.completeness_df(record),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+def styled_comparison(frame: pd.DataFrame) -> Any:
+    if frame.empty:
+        return frame
+
+    def style_row(row: pd.Series) -> list[str]:
+        color = "background-color: #fff3cd" if bool(row.get("disagreement")) else ""
+        return [color] * len(row)
+
+    return frame.style.apply(style_row, axis=1)
+
+
 def paper_tab(conn: Any) -> None:
     st.header("Papers")
     papers = db.table_df(conn, "papers")
@@ -284,31 +336,30 @@ def paper_tab(conn: Any) -> None:
 
         submitted = st.form_submit_button("Save paper")
         if submitted:
-            if not paper_id.strip():
-                st.error("paper_id is required.")
+            payload = {
+                "paper_id": paper_id.strip(),
+                "pmid": pmid,
+                "doi": doi,
+                "title": title,
+                "metal_cluster": metal_cluster,
+                "paper_type": paper_type,
+                "full_text_available": full_text_available,
+                "curator": curator,
+                "status": status,
+                "demo": bool_from_row(defaults, "demo"),
+                "source_type": defaults.get("source_type", "manual_curation")
+                or "manual_curation",
+                "exclude_from_metrics": bool_from_row(defaults, "exclude_from_metrics"),
+                "exclude_from_export_by_default": bool_from_row(
+                    defaults, "exclude_from_export_by_default"
+                ),
+            }
+            errors, warnings = validation.validate_paper(payload)
+            if errors:
+                render_validation_feedback(errors, warnings)
             else:
-                db.upsert_paper(
-                    conn,
-                    {
-                        "paper_id": paper_id.strip(),
-                        "pmid": pmid,
-                        "doi": doi,
-                        "title": title,
-                        "metal_cluster": metal_cluster,
-                        "paper_type": paper_type,
-                        "full_text_available": full_text_available,
-                        "curator": curator,
-                        "status": status,
-                        "demo": bool_from_row(defaults, "demo"),
-                        "source_type": defaults.get("source_type", "manual_curation")
-                        or "manual_curation",
-                        "exclude_from_metrics": bool_from_row(defaults, "exclude_from_metrics"),
-                        "exclude_from_export_by_default": bool_from_row(
-                            defaults, "exclude_from_export_by_default"
-                        ),
-                    },
-                )
-                st.success("Paper saved.")
+                db.upsert_paper(conn, payload)
+                flash_validation_feedback("Paper saved.", warnings)
                 st.rerun()
 
     st.dataframe(papers, use_container_width=True, hide_index=True)
@@ -341,29 +392,28 @@ def claim_slots_tab(conn: Any) -> None:
         )
         submitted = st.form_submit_button("Save claim slot")
         if submitted:
-            if not claim_id.strip():
-                st.error("claim_id is required.")
-            else:
-                paper_row = get_row(papers, "paper_id", paper_id)
-                db.upsert_claim_slot(
-                    conn,
-                    {
-                        "claim_id": claim_id.strip(),
-                        "paper_id": paper_id,
-                        "slot_note": slot_note,
-                        "slot_status": slot_status,
-                        "demo": bool_from_row(defaults, "demo"),
-                        "source_type": defaults.get("source_type", "manual_curation")
-                        or "manual_curation",
-                        "exclude_from_metrics": bool_from_row(defaults, "exclude_from_metrics")
-                        or bool_from_row(paper_row, "exclude_from_metrics"),
-                        "exclude_from_export_by_default": bool_from_row(
-                            defaults, "exclude_from_export_by_default"
-                        )
-                        or bool_from_row(paper_row, "exclude_from_export_by_default"),
-                    },
+            paper_row = get_row(papers, "paper_id", paper_id)
+            payload = {
+                "claim_id": claim_id.strip(),
+                "paper_id": paper_id,
+                "slot_note": slot_note,
+                "slot_status": slot_status,
+                "demo": bool_from_row(defaults, "demo"),
+                "source_type": defaults.get("source_type", "manual_curation")
+                or "manual_curation",
+                "exclude_from_metrics": bool_from_row(defaults, "exclude_from_metrics")
+                or bool_from_row(paper_row, "exclude_from_metrics"),
+                "exclude_from_export_by_default": bool_from_row(
+                    defaults, "exclude_from_export_by_default"
                 )
-                st.success("Claim slot saved.")
+                or bool_from_row(paper_row, "exclude_from_export_by_default"),
+            }
+            errors, warnings = validation.validate_claim_slot(payload)
+            if errors:
+                render_validation_feedback(errors, warnings)
+            else:
+                db.upsert_claim_slot(conn, payload)
+                flash_validation_feedback("Claim slot saved.", warnings)
                 st.rerun()
 
     st.dataframe(slots, use_container_width=True, hide_index=True)
@@ -392,31 +442,31 @@ def annotate_tab(conn: Any) -> None:
     with st.form("annotation_form"):
         curator = st.text_input("Curator", value=clean(defaults.get("curator", "")))
         claim_values = render_claim_fields("Claim record", defaults, "annotation")
+        render_completeness_panel(claim_values)
         submitted = st.form_submit_button("Save annotation")
         if submitted:
-            if not curator.strip():
-                st.error("Curator is required.")
+            payload = {
+                "claim_id": claim_id,
+                "curator": curator.strip(),
+                **claim_values,
+                "demo": bool_from_row(slot_row, "demo"),
+                "source_type": slot_row.get("source_type", "manual_curation")
+                or "manual_curation",
+                "exclude_from_metrics": bool_from_row(slot_row, "exclude_from_metrics"),
+                "exclude_from_export_by_default": bool_from_row(
+                    slot_row, "exclude_from_export_by_default"
+                ),
+            }
+            errors, warnings = validation.validate_claim_record(payload)
+            if errors:
+                render_validation_feedback(errors, warnings)
             else:
-                db.upsert_annotation(
-                    conn,
-                    {
-                        "claim_id": claim_id,
-                        "curator": curator.strip(),
-                        **claim_values,
-                        "demo": bool_from_row(slot_row, "demo"),
-                        "source_type": slot_row.get("source_type", "manual_curation")
-                        or "manual_curation",
-                        "exclude_from_metrics": bool_from_row(
-                            slot_row, "exclude_from_metrics"
-                        ),
-                        "exclude_from_export_by_default": bool_from_row(
-                            slot_row, "exclude_from_export_by_default"
-                        ),
-                    },
-                )
-                st.success("Annotation saved.")
+                db.upsert_annotation(conn, payload)
+                flash_validation_feedback("Annotation saved.", warnings)
                 st.rerun()
 
+    if not existing_for_slot.empty:
+        st.subheader("Current annotations for this slot")
     st.dataframe(existing_for_slot, use_container_width=True, hide_index=True)
 
 
@@ -437,6 +487,10 @@ def adjudicate_tab(conn: Any) -> None:
     claim_id = st.selectbox("Claim slot", slots["claim_id"].tolist(), key="adjudicate_slot")
     slot_row = get_row(slots, "claim_id", claim_id)
     slot_annotations = annotations[annotations["claim_id"] == claim_id]
+    comparison = metrics.claim_comparison_df(slot_annotations)
+    st.subheader("Curator comparison")
+    st.dataframe(styled_comparison(comparison), use_container_width=True, hide_index=True)
+    st.subheader("Raw annotations for this slot")
     st.dataframe(slot_annotations, use_container_width=True, hide_index=True)
 
     existing = get_row(adjudications, "claim_id", claim_id)
@@ -455,6 +509,7 @@ def adjudicate_tab(conn: Any) -> None:
             "Adjudicator", value=clean(existing.get("adjudicator", ""))
         )
         final_values = render_claim_fields("Final record", defaults, "adjudication")
+        render_completeness_panel(final_values)
         adjudication_notes = st.text_area(
             "Adjudication notes",
             value=clean(existing.get("adjudication_notes", "")),
@@ -462,8 +517,15 @@ def adjudicate_tab(conn: Any) -> None:
         )
         submitted = st.form_submit_button("Save adjudication")
         if submitted:
-            if not adjudicator.strip():
-                st.error("Adjudicator is required.")
+            validation_payload = {
+                "adjudicator": adjudicator.strip(),
+                **final_values,
+            }
+            errors, warnings = validation.validate_claim_record(
+                validation_payload, curator_label="Adjudicator"
+            )
+            if errors:
+                render_validation_feedback(errors, warnings)
             else:
                 payload = {
                     "claim_id": claim_id,
@@ -479,7 +541,7 @@ def adjudicate_tab(conn: Any) -> None:
                 }
                 payload.update({f"final_{field}": value for field, value in final_values.items()})
                 db.save_adjudication(conn, payload)
-                st.success("Adjudication saved.")
+                flash_validation_feedback("Adjudication saved.", warnings)
                 st.rerun()
 
 
@@ -488,6 +550,7 @@ def metrics_export_tab(conn: Any) -> None:
     include_demo = st.checkbox("Include demo fixtures", value=False, key="export_demo")
     metric_frame = metrics.metrics_df(conn, include_demo=include_demo)
     records = exports.claim_records_df(conn, include_demo=include_demo)
+    export_summary = exports.export_summary(conn, include_demo=include_demo)
 
     metric_lookup = dict(zip(metric_frame["metric"], metric_frame["value"], strict=False))
     cols = st.columns(4)
@@ -495,6 +558,14 @@ def metrics_export_tab(conn: Any) -> None:
     cols[1].metric("Papers curated", metric_lookup.get("papers_curated", 0))
     cols[2].metric("Claim records", metric_lookup.get("claim_records", 0))
     cols[3].metric("Endpoint agreement", f"{metric_lookup.get('agreement_endpoint_family', 0)}%")
+
+    st.subheader("Export sanity checks")
+    summary_cols = st.columns(5)
+    summary_cols[0].metric("Exported records", export_summary["exported_records"])
+    summary_cols[1].metric("Adjudicated", export_summary["adjudicated_records"])
+    summary_cols[2].metric("Raw annotations", export_summary["raw_annotation_records"])
+    summary_cols[3].metric("Demo in export", export_summary["demo_records_in_export"])
+    summary_cols[4].metric("Demo excluded", export_summary["demo_records_excluded"])
 
     st.subheader("Pilot metrics")
     st.dataframe(metric_frame, use_container_width=True, hide_index=True)
@@ -514,6 +585,13 @@ def metrics_export_tab(conn: Any) -> None:
         mime="text/csv",
     )
 
+    with st.expander("Demo utility"):
+        st.caption("Resets only rows marked as demo fixtures. Manual curation data is left alone.")
+        if st.button("Reset demo fixtures"):
+            db.reset_demo_data(conn)
+            flash("success", "Demo fixtures reset.")
+            st.rerun()
+
 
 def main() -> None:
     st.set_page_config(
@@ -521,6 +599,7 @@ def main() -> None:
         layout="wide",
     )
     st.title("Metalloimmunome Claim Curation Pilot")
+    render_flash()
     conn = get_connection()
 
     tabs = st.tabs(["Papers", "Claim Slots", "Annotate", "Adjudicate", "Metrics + Export"])
@@ -538,4 +617,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

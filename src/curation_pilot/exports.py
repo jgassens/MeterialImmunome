@@ -88,8 +88,30 @@ def csv_bytes(frame: pd.DataFrame) -> bytes:
     return frame.to_csv(index=False).encode("utf-8")
 
 
+def export_summary(conn: sqlite3.Connection, *, include_demo: bool = False) -> dict[str, int]:
+    """Return sanity-check counts for the currently selected export scope."""
+    records = claim_records_df(conn, include_demo=include_demo)
+    all_records = claim_records_df(conn, include_demo=True)
+    if records.empty:
+        adjudicated = 0
+        raw = 0
+        demo_in_export = 0
+    else:
+        adjudicated = int((records["record_type"] == "adjudicated").sum())
+        raw = int((records["record_type"] == "raw_annotation").sum())
+        demo_in_export = int((records["demo"] == 1).sum())
+    return {
+        "exported_records": len(records),
+        "adjudicated_records": adjudicated,
+        "raw_annotation_records": raw,
+        "demo_records_in_export": demo_in_export,
+        "demo_records_excluded": max(len(all_records) - len(records), 0)
+        if not include_demo
+        else 0,
+    }
+
+
 def filtered_tables_for_metrics(
     conn: sqlite3.Connection, *, include_demo: bool = False
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return _load_filtered_tables(conn, include_demo, "exclude_from_metrics")
-

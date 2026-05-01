@@ -197,3 +197,38 @@ def disagreements_df(
                 )
     return pd.DataFrame(rows, columns=["claim_id", "paper_id", "field", "values"])
 
+
+def claim_comparison_df(annotations: pd.DataFrame) -> pd.DataFrame:
+    """Compare paired curator values for one claim slot."""
+    columns = ["field", "disagreement"]
+    if annotations.empty:
+        return pd.DataFrame(columns=columns)
+
+    curators = sorted(str(curator) for curator in annotations["curator"].unique())
+    rows: list[dict[str, str | bool]] = []
+    fields = [
+        "endpoint_family",
+        "direction",
+        "comparator",
+        "material_form",
+        "dose_present",
+        "confidence",
+        "assay",
+        "evidence_location",
+    ]
+    for field in fields:
+        row: dict[str, str | bool] = {"field": field}
+        normalized_values = set()
+        for curator in curators:
+            curator_rows = annotations[annotations["curator"] == curator]
+            if curator_rows.empty:
+                value = ""
+            elif field == "dose_present":
+                value = "present" if dose_present(curator_rows.iloc[0]) else "absent"
+            else:
+                value = str(curator_rows.iloc[0].get(field, "") or "")
+            row[curator] = value
+            normalized_values.add(normalize_value(value))
+        row["disagreement"] = len(normalized_values) > 1
+        rows.append(row)
+    return pd.DataFrame(rows, columns=["field", *curators, "disagreement"])
