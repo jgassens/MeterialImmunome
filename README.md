@@ -193,7 +193,7 @@ Use the local Streamlit app:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-streamlit run app.py
+./run-app
 ```
 
 The app opens locally in the browser and stores records in `data/curation.sqlite`.
