@@ -46,13 +46,20 @@ Do not introduce a heavier stack unless the user explicitly changes the project 
 Build only:
 
 - paper registry
+- paper-registry CSV import
 - claim-entry form
+- shared claim-slot anchoring
 - controlled vocabulary fields
+- valid-claim labeling
+- annotation locking
 - missingness encoding
 - saved claims table
 - adjudication view
+- codebook and QA view
 - metrics dashboard
 - CSV export
+- timestamped grant packet export
+- timestamped SQLite backup download
 
 Do not build in v1:
 
@@ -117,9 +124,11 @@ Prefer clear forms, tables, dropdowns, checkboxes, and export buttons over decor
 Keep app logic simple and inspectable:
 
 - database setup should be easy to understand
+- schema changes should be idempotent and preserve existing SQLite files
 - claim IDs should be deterministic
 - exports should be reproducible
 - dashboard metrics should be derived from saved records
+- agreement and kappa should default to paired locked annotations
 - adjudication should preserve original curator entries and final values
 
 ## Testing Expectations
@@ -133,6 +142,8 @@ When adding implementation later, verify at minimum:
 - claim records can be exported to CSV
 - metrics update from saved records
 - adjudicated values can be exported or distinguished from raw annotations
+- grant packet outputs exclude demo rows by default
+- SQLite backup downloads are real SQLite files
 
 Do not claim readiness from UI inspection alone. Use a small seed dataset or manual smoke test that proves the workflow produces grant-ready outputs.
 
@@ -145,4 +156,3 @@ Keep `README.md` aligned with this file. If implementation changes the workflow,
 - how to run it
 - how to curate records
 - how to export grant-ready outputs
-

@@ -6,6 +6,14 @@ FULL_TEXT_OPTIONS = ["yes", "no"]
 METAL_CLUSTERS = ["aluminum", "nickel", "CoCr", "zinc", "other"]
 
 SLOT_STATUSES = ["open", "uncertain", "invalid", "adjudicated"]
+ANCHOR_TYPES = [
+    "figure",
+    "table",
+    "results paragraph",
+    "methods paragraph",
+    "supplement",
+    "other",
+]
 
 ENDPOINT_FAMILIES = [
     "inflammasome activation",
@@ -26,7 +34,9 @@ MATERIAL_FORMS = [
 ]
 CONTEXTS = ["in vitro", "in vivo", "ex vivo", "clinical tissue"]
 CONFIDENCE_LEVELS = ["high", "medium", "low"]
+VALID_CLAIM_OPTIONS = ["yes", "no", "unsure"]
 MISSINGNESS_OPTIONS = [
+    "none apparent",
     "dose missing",
     "comparator missing",
     "speciation missing",
@@ -36,6 +46,7 @@ MISSINGNESS_OPTIONS = [
 ]
 
 CLAIM_FIELDS = [
+    "valid_claim",
     "metal",
     "material_form",
     "speciation_or_oxidation_state",
@@ -70,12 +81,48 @@ EXPORT_COLUMNS = [
 ]
 
 AGREEMENT_FIELDS = [
+    "valid_claim",
     "endpoint_family",
     "direction",
     "comparator",
     "material_form",
     "dose_present",
     "confidence",
+]
+
+KAPPA_FIELDS = [
+    "valid_claim",
+    "endpoint_family",
+    "direction",
+    "material_form",
+    "confidence",
+    "dose_present",
+]
+
+PAPER_IMPORT_COLUMNS = [
+    "paper_id",
+    "pmid",
+    "pmcid",
+    "doi",
+    "title",
+    "first_author",
+    "year",
+    "journal",
+    "cluster",
+    "metal_cluster",
+    "metal",
+    "material_form",
+    "biological_model",
+    "endpoint_families",
+    "key_endpoints",
+    "assays",
+    "curation_tier",
+    "include_in_v1",
+    "notes",
+    "paper_type",
+    "full_text_available",
+    "curator",
+    "status",
 ]
 
 
@@ -93,4 +140,3 @@ def join_multi(values: list[str] | tuple[str, ...] | str | None) -> str:
     if isinstance(values, str):
         return values.strip()
     return "; ".join(str(value).strip() for value in values if str(value).strip())
-

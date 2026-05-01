@@ -12,8 +12,17 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from curation_pilot import db, exports, metrics, validation  # noqa: E402
+from curation_pilot import (  # noqa: E402
+    db,
+    exports,
+    metrics,
+    packet,
+    quality,
+    registry_import,
+    validation,
+)
 from curation_pilot.vocab import (  # noqa: E402
+    ANCHOR_TYPES,
     CLAIM_FIELDS,
     CONFIDENCE_LEVELS,
     CONTEXTS,
@@ -26,6 +35,7 @@ from curation_pilot.vocab import (  # noqa: E402
     PAPER_STATUSES,
     PAPER_TYPES,
     SLOT_STATUSES,
+    VALID_CLAIM_OPTIONS,
     join_multi,
     split_multi,
 )
@@ -58,10 +68,11 @@ def select_control(
     *,
     key: str,
     blank: bool = True,
+    disabled: bool = False,
 ) -> str:
     choices = options_with_current(options, current, blank=blank)
     index = choices.index(current) if current in choices else 0
-    return st.selectbox(label, choices, index=index, key=key)
+    return st.selectbox(label, choices, index=index, key=key, disabled=disabled)
 
 
 def bool_from_row(row: dict[str, Any], key: str) -> bool:
@@ -115,14 +126,31 @@ def get_row(frame: pd.DataFrame, key: str, value: str) -> dict[str, Any]:
     return matched.iloc[0].fillna("").to_dict()
 
 
-def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) -> dict[str, Any]:
+def render_claim_fields(
+    prefix: str,
+    defaults: dict[str, Any],
+    key_prefix: str,
+    *,
+    disabled: bool = False,
+) -> dict[str, Any]:
     st.subheader(prefix)
     values: dict[str, Any] = {}
+
+    values["valid_claim"] = select_control(
+        "Valid claim",
+        VALID_CLAIM_OPTIONS,
+        clean(defaults.get("valid_claim", "")),
+        key=f"{key_prefix}_valid_claim",
+        disabled=disabled,
+    )
 
     row1 = st.columns(3)
     with row1[0]:
         values["metal"] = st.text_input(
-            "Metal", value=clean(defaults.get("metal", "")), key=f"{key_prefix}_metal"
+            "Metal",
+            value=clean(defaults.get("metal", "")),
+            key=f"{key_prefix}_metal",
+            disabled=disabled,
         )
     with row1[1]:
         values["material_form"] = select_control(
@@ -130,28 +158,37 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
             MATERIAL_FORMS,
             clean(defaults.get("material_form", "")),
             key=f"{key_prefix}_material_form",
+            disabled=disabled,
         )
     with row1[2]:
         values["speciation_or_oxidation_state"] = st.text_input(
             "Speciation or oxidation state",
             value=clean(defaults.get("speciation_or_oxidation_state", "")),
             key=f"{key_prefix}_speciation",
+            disabled=disabled,
         )
 
     row2 = st.columns(3)
     with row2[0]:
         values["dose"] = st.text_input(
-            "Dose", value=clean(defaults.get("dose", "")), key=f"{key_prefix}_dose"
+            "Dose",
+            value=clean(defaults.get("dose", "")),
+            key=f"{key_prefix}_dose",
+            disabled=disabled,
         )
     with row2[1]:
         values["duration"] = st.text_input(
             "Duration",
             value=clean(defaults.get("duration", "")),
             key=f"{key_prefix}_duration",
+            disabled=disabled,
         )
     with row2[2]:
         values["species"] = st.text_input(
-            "Species", value=clean(defaults.get("species", "")), key=f"{key_prefix}_species"
+            "Species",
+            value=clean(defaults.get("species", "")),
+            key=f"{key_prefix}_species",
+            disabled=disabled,
         )
 
     row3 = st.columns(3)
@@ -160,6 +197,7 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
             "Cell or tissue",
             value=clean(defaults.get("cell_or_tissue", "")),
             key=f"{key_prefix}_cell",
+            disabled=disabled,
         )
     with row3[1]:
         values["in_vitro_or_in_vivo"] = select_control(
@@ -167,12 +205,14 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
             CONTEXTS,
             clean(defaults.get("in_vitro_or_in_vivo", "")),
             key=f"{key_prefix}_context",
+            disabled=disabled,
         )
     with row3[2]:
         values["route_or_context"] = st.text_input(
             "Route or context",
             value=clean(defaults.get("route_or_context", "")),
             key=f"{key_prefix}_route",
+            disabled=disabled,
         )
 
     row4 = st.columns(3)
@@ -181,12 +221,14 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
             "Stimulation context",
             value=clean(defaults.get("stimulation_context", "")),
             key=f"{key_prefix}_stim",
+            disabled=disabled,
         )
     with row4[1]:
         values["comparator"] = st.text_input(
             "Comparator",
             value=clean(defaults.get("comparator", "")),
             key=f"{key_prefix}_comparator",
+            disabled=disabled,
         )
     with row4[2]:
         values["endpoint_family"] = select_control(
@@ -194,6 +236,7 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
             ENDPOINT_FAMILIES,
             clean(defaults.get("endpoint_family", "")),
             key=f"{key_prefix}_endpoint_family",
+            disabled=disabled,
         )
 
     row5 = st.columns(3)
@@ -202,10 +245,14 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
             "Specific endpoint",
             value=clean(defaults.get("specific_endpoint", "")),
             key=f"{key_prefix}_specific_endpoint",
+            disabled=disabled,
         )
     with row5[1]:
         values["assay"] = st.text_input(
-            "Assay", value=clean(defaults.get("assay", "")), key=f"{key_prefix}_assay"
+            "Assay",
+            value=clean(defaults.get("assay", "")),
+            key=f"{key_prefix}_assay",
+            disabled=disabled,
         )
     with row5[2]:
         values["direction"] = select_control(
@@ -213,6 +260,7 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
             DIRECTIONS,
             clean(defaults.get("direction", "")),
             key=f"{key_prefix}_direction",
+            disabled=disabled,
         )
 
     row6 = st.columns(3)
@@ -221,12 +269,14 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
             "Magnitude",
             value=clean(defaults.get("magnitude", "")),
             key=f"{key_prefix}_magnitude",
+            disabled=disabled,
         )
     with row6[1]:
         values["evidence_location"] = st.text_input(
             "Evidence location",
             value=clean(defaults.get("evidence_location", "")),
             key=f"{key_prefix}_evidence_location",
+            disabled=disabled,
         )
     with row6[2]:
         values["confidence"] = select_control(
@@ -234,6 +284,7 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
             CONFIDENCE_LEVELS,
             clean(defaults.get("confidence", "")),
             key=f"{key_prefix}_confidence",
+            disabled=disabled,
         )
 
     default_missingness = split_multi(clean(defaults.get("missing_core_fields", "")))
@@ -243,6 +294,7 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
             MISSINGNESS_OPTIONS,
             default=[item for item in default_missingness if item in MISSINGNESS_OPTIONS],
             key=f"{key_prefix}_missing",
+            disabled=disabled,
         )
     )
     values["exact_evidence_excerpt"] = st.text_area(
@@ -250,12 +302,14 @@ def render_claim_fields(prefix: str, defaults: dict[str, Any], key_prefix: str) 
         value=clean(defaults.get("exact_evidence_excerpt", "")),
         key=f"{key_prefix}_excerpt",
         height=90,
+        disabled=disabled,
     )
     values["curator_notes"] = st.text_area(
         "Curator notes",
         value=clean(defaults.get("curator_notes", "")),
         key=f"{key_prefix}_notes",
         height=80,
+        disabled=disabled,
     )
 
     return values
@@ -295,9 +349,20 @@ def paper_tab(conn: Any) -> None:
         with cols[1]:
             pmid = st.text_input("PMID", value=clean(defaults.get("pmid", "")))
         with cols[2]:
+            pmcid = st.text_input("PMCID", value=clean(defaults.get("pmcid", "")))
+
+        cols = st.columns(3)
+        with cols[0]:
             doi = st.text_input("DOI", value=clean(defaults.get("doi", "")))
+        with cols[1]:
+            first_author = st.text_input(
+                "First author", value=clean(defaults.get("first_author", ""))
+            )
+        with cols[2]:
+            year = st.text_input("Year", value=clean(defaults.get("year", "")))
 
         title = st.text_input("Title", value=clean(defaults.get("title", "")))
+        journal = st.text_input("Journal", value=clean(defaults.get("journal", "")))
 
         cols = st.columns(5)
         with cols[0]:
@@ -334,14 +399,60 @@ def paper_tab(conn: Any) -> None:
                 blank=False,
             )
 
+        with st.expander("Extended registry metadata"):
+            cols = st.columns(3)
+            with cols[0]:
+                cluster = st.text_input("Cluster", value=clean(defaults.get("cluster", "")))
+            with cols[1]:
+                metal = st.text_input("Metal", value=clean(defaults.get("metal", "")))
+            with cols[2]:
+                registry_material_form = st.text_input(
+                    "Registry material form",
+                    value=clean(defaults.get("material_form", "")),
+                )
+            biological_model = st.text_input(
+                "Biological model", value=clean(defaults.get("biological_model", ""))
+            )
+            endpoint_families = st.text_input(
+                "Endpoint families", value=clean(defaults.get("endpoint_families", ""))
+            )
+            key_endpoints = st.text_input(
+                "Key endpoints", value=clean(defaults.get("key_endpoints", ""))
+            )
+            assays = st.text_input("Assays", value=clean(defaults.get("assays", "")))
+            cols = st.columns(2)
+            with cols[0]:
+                curation_tier = st.text_input(
+                    "Curation tier", value=clean(defaults.get("curation_tier", ""))
+                )
+            with cols[1]:
+                include_in_v1 = st.text_input(
+                    "Include in v1", value=clean(defaults.get("include_in_v1", ""))
+                )
+            notes = st.text_area("Registry notes", value=clean(defaults.get("notes", "")))
+
         submitted = st.form_submit_button("Save paper")
         if submitted:
             payload = {
                 "paper_id": paper_id.strip(),
                 "pmid": pmid,
+                "pmcid": pmcid,
                 "doi": doi,
                 "title": title,
+                "first_author": first_author,
+                "year": year,
+                "journal": journal,
+                "cluster": cluster,
                 "metal_cluster": metal_cluster,
+                "metal": metal,
+                "material_form": registry_material_form,
+                "biological_model": biological_model,
+                "endpoint_families": endpoint_families,
+                "key_endpoints": key_endpoints,
+                "assays": assays,
+                "curation_tier": curation_tier,
+                "include_in_v1": include_in_v1,
+                "notes": notes,
                 "paper_type": paper_type,
                 "full_text_available": full_text_available,
                 "curator": curator,
@@ -360,6 +471,28 @@ def paper_tab(conn: Any) -> None:
             else:
                 db.upsert_paper(conn, payload)
                 flash_validation_feedback("Paper saved.", warnings)
+                st.rerun()
+
+    with st.expander("Import paper registry CSV"):
+        uploaded = st.file_uploader("Paper registry CSV", type=["csv"], key="paper_import")
+        if uploaded is not None:
+            content = uploaded.getvalue()
+            preview = registry_import.validate_paper_registry_csv(conn, content)
+            st.subheader("Import validation")
+            st.dataframe(preview.issues, use_container_width=True, hide_index=True)
+            st.subheader("Import preview")
+            st.dataframe(preview.records, use_container_width=True, hide_index=True)
+            if preview.has_errors:
+                st.error("Fix blocking import errors before saving.")
+            elif st.button("Import paper registry"):
+                result = registry_import.import_paper_registry_csv(conn, content)
+                flash(
+                    "success",
+                    f"Imported {result.imported_count} paper registry rows.",
+                )
+                for issue in result.issues.to_dict("records"):
+                    if issue["severity"] == "warning":
+                        flash("warning", issue["message"])
                 st.rerun()
 
     st.dataframe(papers, use_container_width=True, hide_index=True)
@@ -382,6 +515,22 @@ def claim_slots_tab(conn: Any) -> None:
 
     with st.form("slot_form"):
         claim_id = st.text_input("claim_id", value=clean(default_claim_id))
+        cols = st.columns(3)
+        with cols[0]:
+            anchor_type = select_control(
+                "Anchor type",
+                ANCHOR_TYPES,
+                clean(defaults.get("anchor_type", "")),
+                key="slot_anchor_type",
+            )
+        with cols[1]:
+            anchor_location = st.text_input(
+                "Anchor location", value=clean(defaults.get("anchor_location", ""))
+            )
+        with cols[2]:
+            anchor_note = st.text_input(
+                "Anchor note", value=clean(defaults.get("anchor_note", ""))
+            )
         slot_note = st.text_area("Slot note", value=clean(defaults.get("slot_note", "")), height=100)
         slot_status = select_control(
             "Slot status",
@@ -396,6 +545,9 @@ def claim_slots_tab(conn: Any) -> None:
             payload = {
                 "claim_id": claim_id.strip(),
                 "paper_id": paper_id,
+                "anchor_type": anchor_type,
+                "anchor_location": anchor_location,
+                "anchor_note": anchor_note,
                 "slot_note": slot_note,
                 "slot_status": slot_status,
                 "demo": bool_from_row(defaults, "demo"),
@@ -438,12 +590,33 @@ def annotate_tab(conn: Any) -> None:
         if selected_annotation == "New annotation"
         else get_row(existing_for_slot, "curator", selected_annotation)
     )
+    locked = bool_from_row(defaults, "locked")
+    if selected_annotation != "New annotation":
+        status = "locked" if locked else "unlocked"
+        st.info(f"Selected annotation is {status}.")
+        lock_cols = st.columns(2)
+        with lock_cols[0]:
+            if not locked and st.button("Lock selected annotation"):
+                db.set_annotation_lock(conn, claim_id, selected_annotation, locked=True)
+                flash("success", "Annotation locked.")
+                st.rerun()
+        with lock_cols[1]:
+            if locked and st.button("Unlock selected annotation"):
+                db.set_annotation_lock(conn, claim_id, selected_annotation, locked=False)
+                flash("warning", "Annotation unlocked for editing.")
+                st.rerun()
 
     with st.form("annotation_form"):
-        curator = st.text_input("Curator", value=clean(defaults.get("curator", "")))
-        claim_values = render_claim_fields("Claim record", defaults, "annotation")
+        curator = st.text_input(
+            "Curator",
+            value=clean(defaults.get("curator", "")),
+            disabled=locked,
+        )
+        claim_values = render_claim_fields(
+            "Claim record", defaults, "annotation", disabled=locked
+        )
         render_completeness_panel(claim_values)
-        submitted = st.form_submit_button("Save annotation")
+        submitted = st.form_submit_button("Save annotation", disabled=locked)
         if submitted:
             payload = {
                 "claim_id": claim_id,
@@ -487,6 +660,11 @@ def adjudicate_tab(conn: Any) -> None:
     claim_id = st.selectbox("Claim slot", slots["claim_id"].tolist(), key="adjudicate_slot")
     slot_row = get_row(slots, "claim_id", claim_id)
     slot_annotations = annotations[annotations["claim_id"] == claim_id]
+    locked_count = (
+        slot_annotations[slot_annotations["locked"].astype(int) == 1]["curator"].nunique()
+        if not slot_annotations.empty and "locked" in slot_annotations.columns
+        else 0
+    )
     comparison = metrics.claim_comparison_df(slot_annotations)
     st.subheader("Curator comparison")
     st.dataframe(styled_comparison(comparison), use_container_width=True, hide_index=True)
@@ -494,6 +672,9 @@ def adjudicate_tab(conn: Any) -> None:
     st.dataframe(slot_annotations, use_container_width=True, hide_index=True)
 
     existing = get_row(adjudications, "claim_id", claim_id)
+    eligible_for_adjudication = locked_count >= 2 or bool(existing)
+    if not eligible_for_adjudication:
+        st.warning("Adjudication is enabled after at least two curator annotations are locked.")
     if existing:
         defaults = {
             field: existing.get(f"final_{field}", "")
@@ -515,7 +696,9 @@ def adjudicate_tab(conn: Any) -> None:
             value=clean(existing.get("adjudication_notes", "")),
             height=90,
         )
-        submitted = st.form_submit_button("Save adjudication")
+        submitted = st.form_submit_button(
+            "Save adjudication", disabled=not eligible_for_adjudication
+        )
         if submitted:
             validation_payload = {
                 "adjudicator": adjudicator.strip(),
@@ -585,12 +768,61 @@ def metrics_export_tab(conn: Any) -> None:
         mime="text/csv",
     )
 
+    st.subheader("Grant packet")
+    packet_name, packet_bytes = packet.grant_packet_zip(conn, include_demo=include_demo)
+    st.download_button(
+        f"Download {packet_name}",
+        data=packet_bytes,
+        file_name=packet_name,
+        mime="application/zip",
+    )
+
+    backup_name, backup_bytes = packet.sqlite_backup_download(conn)
+    st.download_button(
+        f"Download {backup_name}",
+        data=backup_bytes,
+        file_name=backup_name,
+        mime="application/vnd.sqlite3",
+    )
+
     with st.expander("Demo utility"):
         st.caption("Resets only rows marked as demo fixtures. Manual curation data is left alone.")
         if st.button("Reset demo fixtures"):
             db.reset_demo_data(conn)
             flash("success", "Demo fixtures reset.")
             st.rerun()
+
+
+def codebook_qa_tab(conn: Any) -> None:
+    st.header("Codebook + QA")
+    include_demo = st.checkbox("Include demo fixtures", value=False, key="qa_demo")
+    qa_frame = quality.data_quality_report_df(conn, include_demo=include_demo)
+    codebook = quality.data_dictionary_df()
+
+    st.subheader("QA summary")
+    if qa_frame.empty:
+        st.success("No QA flags for the selected export scope.")
+    else:
+        cols = st.columns(3)
+        cols[0].metric("QA flags", len(qa_frame))
+        cols[1].metric("Errors", int((qa_frame["severity"] == "error").sum()))
+        cols[2].metric("Warnings", int((qa_frame["severity"] == "warning").sum()))
+        st.dataframe(qa_frame, use_container_width=True, hide_index=True)
+        st.download_button(
+            "Download data_quality_report.csv",
+            data=exports.csv_bytes(qa_frame),
+            file_name="data_quality_report.csv",
+            mime="text/csv",
+        )
+
+    st.subheader("Data dictionary")
+    st.dataframe(codebook, use_container_width=True, hide_index=True)
+    st.download_button(
+        "Download data_dictionary.csv",
+        data=exports.csv_bytes(codebook),
+        file_name="data_dictionary.csv",
+        mime="text/csv",
+    )
 
 
 def main() -> None:
@@ -602,7 +834,16 @@ def main() -> None:
     render_flash()
     conn = get_connection()
 
-    tabs = st.tabs(["Papers", "Claim Slots", "Annotate", "Adjudicate", "Metrics + Export"])
+    tabs = st.tabs(
+        [
+            "Papers",
+            "Claim Slots",
+            "Annotate",
+            "Adjudicate",
+            "Codebook + QA",
+            "Metrics + Export",
+        ]
+    )
     with tabs[0]:
         paper_tab(conn)
     with tabs[1]:
@@ -612,6 +853,8 @@ def main() -> None:
     with tabs[3]:
         adjudicate_tab(conn)
     with tabs[4]:
+        codebook_qa_tab(conn)
+    with tabs[5]:
         metrics_export_tab(conn)
 
 

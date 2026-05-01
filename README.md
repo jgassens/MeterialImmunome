@@ -29,6 +29,7 @@ Planned v1 stack:
 - **Streamlit** for the interface
 - **SQLite** for local storage
 - **Pandas** for export and dashboard metrics
+- **scikit-learn** for Cohen's kappa
 - **CSV** for grant-ready data export
 
 No LLMs are planned for v1.
@@ -208,17 +209,57 @@ Curators should register real papers, create shared claim slots, enter paired an
 
 ## App Workflow
 
-The Streamlit app has five tabs:
+The Streamlit app has six tabs:
 
 - **Papers**: create and update paper registry records.
-- **Claim Slots**: create deterministic shared claim IDs such as `P001-C003`.
+- **Claim Slots**: create deterministic shared claim IDs such as `P001-C003`, with anchor type, anchor location, and anchor note fields so paired curators work from the same evidence target.
 - **Annotate**: enter one curator annotation per shared claim slot, with validation and a completeness panel for dose, comparator, material form, speciation, assay, and evidence location.
 - **Adjudicate**: review paired disagreements in a curator comparison table and save final values.
+- **Codebook + QA**: review controlled vocabularies, field definitions, export rules, and data-quality flags.
 - **Metrics + Export**: review export sanity checks, then download `curated_claim_records.csv` and `pilot_metrics.csv`.
 
 Exports use adjudicated records when available. If a claim slot has not been adjudicated yet, the export includes raw annotation records instead.
 
 The **Metrics + Export** tab also includes a demo utility that deletes and reseeds only rows marked as demo fixtures. It does not touch manual curation rows.
+
+## Slice 3 Pilot Readiness
+
+Slice 3 prepares the app for a 12-paper MVP pilot and a verified 22-paper registry-backed expansion set.
+
+New pilot-readiness features:
+
+- Paper-registry CSV import for paper metadata only.
+- Extended paper metadata fields such as PMCID, first author, year, journal, biological model, endpoint families, assays, curation tier, and `include_in_v1`.
+- `valid_claim` on annotations and adjudications: yes / no / unsure.
+- Annotation locking with `locked` and `locked_at`; agreement and kappa default to paired locked annotations.
+- Cohen's kappa for `valid_claim`, endpoint family, direction, material form, confidence, and dose-present status.
+- QA flags for unanchored slots, unpaired slots, unlocked paired annotations, missingness-label inconsistencies, valid-claim disagreements, and low-confidence final records.
+- Timestamped grant packet ZIP exports and timestamped SQLite backup downloads.
+
+The paper import intentionally does not import claim slots, annotations, adjudications, PDFs, or AI-generated records.
+
+## Grant Packet
+
+The timestamped grant packet is named like:
+
+```text
+metalloimmunome_pilot_packet_YYYYMMDD_HHMM.zip
+```
+
+It contains:
+
+- `curated_claim_records.csv`
+- `paper_registry.csv`
+- `claim_slots.csv`
+- `pilot_metrics.csv`
+- `agreement_report.csv`
+- `data_quality_report.csv`
+- `data_dictionary.csv`
+- `example_claims.csv`
+- `proposal_summary.md`
+- `README_grant_packet.md`
+
+Demo rows are excluded by default.
 
 ## Development Checks
 

@@ -84,6 +84,10 @@ def validate_claim_slot(payload: Mapping[str, Any]) -> tuple[list[str], list[str
         errors.append("claim_id is required.")
     if not str(payload.get("paper_id", "")).strip():
         errors.append("paper_id is required.")
+    if not str(payload.get("anchor_type", "")).strip():
+        warnings.append("Anchor type is blank.")
+    if not str(payload.get("anchor_location", "")).strip():
+        warnings.append("Anchor location is blank.")
     if not str(payload.get("slot_note", "")).strip():
         warnings.append("Slot note is blank; use it to identify the shared claim target.")
     return errors, warnings
@@ -98,20 +102,24 @@ def validate_claim_record(
         payload.get("adjudicator", "")
     ).strip():
         errors.append(f"{curator_label} is required.")
-    for field, label in [
-        ("endpoint_family", "Endpoint family"),
-        ("direction", "Direction"),
-        ("confidence", "Confidence"),
-        ("evidence_location", "Evidence location"),
-    ]:
-        if not str(payload.get(field, "")).strip():
-            errors.append(f"{label} is required.")
+    valid_claim = str(payload.get("valid_claim", "")).strip()
+    if not valid_claim:
+        errors.append("Valid claim is required.")
+    if valid_claim == "yes":
+        for field, label in [
+            ("endpoint_family", "Endpoint family"),
+            ("direction", "Direction"),
+            ("confidence", "Confidence"),
+            ("evidence_location", "Evidence location"),
+        ]:
+            if not str(payload.get(field, "")).strip():
+                errors.append(f"{label} is required.")
 
     labels = missingness_labels(payload)
-    for field, missingness in MISSINGNESS_BY_FIELD.items():
-        if not has_value(payload.get(field, "")) and missingness not in labels:
-            warnings.append(
-                f"{field} is blank but `{missingness}` is not selected."
-            )
+    if valid_claim == "yes":
+        for field, missingness in MISSINGNESS_BY_FIELD.items():
+            if not has_value(payload.get(field, "")) and missingness not in labels:
+                warnings.append(
+                    f"{field} is blank but `{missingness}` is not selected."
+                )
     return errors, warnings
-

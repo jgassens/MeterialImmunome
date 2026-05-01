@@ -18,9 +18,23 @@ DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "curation.sqlite"
 PAPER_COLUMNS = [
     "paper_id",
     "pmid",
+    "pmcid",
     "doi",
     "title",
+    "first_author",
+    "year",
+    "journal",
+    "cluster",
     "metal_cluster",
+    "metal",
+    "material_form",
+    "biological_model",
+    "endpoint_families",
+    "key_endpoints",
+    "assays",
+    "curation_tier",
+    "include_in_v1",
+    "notes",
     "paper_type",
     "full_text_available",
     "curator",
@@ -34,6 +48,9 @@ PAPER_COLUMNS = [
 CLAIM_SLOT_COLUMNS = [
     "claim_id",
     "paper_id",
+    "anchor_type",
+    "anchor_location",
+    "anchor_note",
     "slot_note",
     "slot_status",
     "demo",
@@ -46,11 +63,45 @@ ANNOTATION_COLUMNS = [
     "claim_id",
     "curator",
     *CLAIM_FIELDS,
+    "locked",
+    "locked_at",
     "demo",
     "source_type",
     "exclude_from_metrics",
     "exclude_from_export_by_default",
 ]
+
+SCHEMA_UPGRADES = {
+    "papers": {
+        "pmcid": "TEXT NOT NULL DEFAULT ''",
+        "first_author": "TEXT NOT NULL DEFAULT ''",
+        "year": "TEXT NOT NULL DEFAULT ''",
+        "journal": "TEXT NOT NULL DEFAULT ''",
+        "cluster": "TEXT NOT NULL DEFAULT ''",
+        "metal": "TEXT NOT NULL DEFAULT ''",
+        "material_form": "TEXT NOT NULL DEFAULT ''",
+        "biological_model": "TEXT NOT NULL DEFAULT ''",
+        "endpoint_families": "TEXT NOT NULL DEFAULT ''",
+        "key_endpoints": "TEXT NOT NULL DEFAULT ''",
+        "assays": "TEXT NOT NULL DEFAULT ''",
+        "curation_tier": "TEXT NOT NULL DEFAULT ''",
+        "include_in_v1": "TEXT NOT NULL DEFAULT ''",
+        "notes": "TEXT NOT NULL DEFAULT ''",
+    },
+    "claim_slots": {
+        "anchor_type": "TEXT NOT NULL DEFAULT ''",
+        "anchor_location": "TEXT NOT NULL DEFAULT ''",
+        "anchor_note": "TEXT NOT NULL DEFAULT ''",
+    },
+    "annotations": {
+        "valid_claim": "TEXT NOT NULL DEFAULT ''",
+        "locked": "INTEGER NOT NULL DEFAULT 0",
+        "locked_at": "TEXT NOT NULL DEFAULT ''",
+    },
+    "adjudications": {
+        "final_valid_claim": "TEXT NOT NULL DEFAULT ''",
+    },
+}
 
 ADJUDICATION_COLUMNS = [
     "claim_id",
@@ -96,9 +147,23 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS papers (
             paper_id TEXT PRIMARY KEY,
             pmid TEXT NOT NULL DEFAULT '',
+            pmcid TEXT NOT NULL DEFAULT '',
             doi TEXT NOT NULL DEFAULT '',
             title TEXT NOT NULL DEFAULT '',
+            first_author TEXT NOT NULL DEFAULT '',
+            year TEXT NOT NULL DEFAULT '',
+            journal TEXT NOT NULL DEFAULT '',
+            cluster TEXT NOT NULL DEFAULT '',
             metal_cluster TEXT NOT NULL DEFAULT '',
+            metal TEXT NOT NULL DEFAULT '',
+            material_form TEXT NOT NULL DEFAULT '',
+            biological_model TEXT NOT NULL DEFAULT '',
+            endpoint_families TEXT NOT NULL DEFAULT '',
+            key_endpoints TEXT NOT NULL DEFAULT '',
+            assays TEXT NOT NULL DEFAULT '',
+            curation_tier TEXT NOT NULL DEFAULT '',
+            include_in_v1 TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
             paper_type TEXT NOT NULL DEFAULT 'primary study',
             full_text_available TEXT NOT NULL DEFAULT 'yes',
             curator TEXT NOT NULL DEFAULT '',
@@ -114,6 +179,9 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS claim_slots (
             claim_id TEXT PRIMARY KEY,
             paper_id TEXT NOT NULL,
+            anchor_type TEXT NOT NULL DEFAULT '',
+            anchor_location TEXT NOT NULL DEFAULT '',
+            anchor_note TEXT NOT NULL DEFAULT '',
             slot_note TEXT NOT NULL DEFAULT '',
             slot_status TEXT NOT NULL DEFAULT 'open',
             demo INTEGER NOT NULL DEFAULT 0,
@@ -129,6 +197,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
             annotation_id INTEGER PRIMARY KEY AUTOINCREMENT,
             claim_id TEXT NOT NULL,
             curator TEXT NOT NULL,
+            valid_claim TEXT NOT NULL DEFAULT '',
             metal TEXT NOT NULL DEFAULT '',
             material_form TEXT NOT NULL DEFAULT '',
             speciation_or_oxidation_state TEXT NOT NULL DEFAULT '',
@@ -150,6 +219,8 @@ def create_schema(conn: sqlite3.Connection) -> None:
             missing_core_fields TEXT NOT NULL DEFAULT '',
             confidence TEXT NOT NULL DEFAULT '',
             curator_notes TEXT NOT NULL DEFAULT '',
+            locked INTEGER NOT NULL DEFAULT 0,
+            locked_at TEXT NOT NULL DEFAULT '',
             demo INTEGER NOT NULL DEFAULT 0,
             source_type TEXT NOT NULL DEFAULT 'manual_curation',
             exclude_from_metrics INTEGER NOT NULL DEFAULT 0,
@@ -163,6 +234,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS adjudications (
             claim_id TEXT PRIMARY KEY,
             adjudicator TEXT NOT NULL,
+            final_valid_claim TEXT NOT NULL DEFAULT '',
             final_metal TEXT NOT NULL DEFAULT '',
             final_material_form TEXT NOT NULL DEFAULT '',
             final_speciation_or_oxidation_state TEXT NOT NULL DEFAULT '',
@@ -195,6 +267,59 @@ def create_schema(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    ensure_schema_upgrades(conn)
+    backfill_schema_defaults(conn)
+
+
+def existing_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def ensure_schema_upgrades(conn: sqlite3.Connection) -> None:
+    for table, columns in SCHEMA_UPGRADES.items():
+        existing = existing_columns(conn, table)
+        for column, definition in columns.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def backfill_schema_defaults(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        UPDATE papers
+        SET cluster = metal_cluster
+        WHERE cluster = '' AND metal_cluster != ''
+        """
+    )
+    conn.execute(
+        """
+        UPDATE papers
+        SET metal_cluster = cluster
+        WHERE metal_cluster = '' AND cluster != ''
+        """
+    )
+    conn.execute(
+        """
+        UPDATE annotations
+        SET valid_claim = 'yes'
+        WHERE valid_claim = '' AND demo = 1
+        """
+    )
+    conn.execute(
+        """
+        UPDATE annotations
+        SET locked = 1,
+            locked_at = COALESCE(NULLIF(locked_at, ''), 'demo fixture')
+        WHERE demo = 1
+        """
+    )
+    conn.execute(
+        """
+        UPDATE adjudications
+        SET final_valid_claim = 'yes'
+        WHERE final_valid_claim = '' AND demo = 1
+        """
+    )
 
 
 def query_df(
@@ -218,7 +343,12 @@ def _normalize_payload(columns: list[str], payload: Mapping[str, Any]) -> dict[s
     row: dict[str, Any] = {}
     for column in columns:
         value = payload.get(column, "")
-        if column in {"demo", "exclude_from_metrics", "exclude_from_export_by_default"}:
+        if column in {
+            "demo",
+            "exclude_from_metrics",
+            "exclude_from_export_by_default",
+            "locked",
+        }:
             value = _bool_int(value)
         if column == "missing_core_fields" or column == "final_missing_core_fields":
             value = join_multi(value)
@@ -232,6 +362,8 @@ def _upsert(
     key_columns: list[str],
     columns: list[str],
     payload: Mapping[str, Any],
+    *,
+    commit: bool = True,
 ) -> None:
     row = _normalize_payload(columns, payload)
     placeholders = ", ".join("?" for _ in columns)
@@ -246,19 +378,33 @@ def _upsert(
             updated_at=CURRENT_TIMESTAMP
     """
     conn.execute(sql, [row[column] for column in columns])
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
-def upsert_paper(conn: sqlite3.Connection, payload: Mapping[str, Any]) -> None:
-    _upsert(conn, "papers", ["paper_id"], PAPER_COLUMNS, payload)
+def upsert_paper(
+    conn: sqlite3.Connection, payload: Mapping[str, Any], *, commit: bool = True
+) -> None:
+    _upsert(conn, "papers", ["paper_id"], PAPER_COLUMNS, payload, commit=commit)
 
 
-def upsert_claim_slot(conn: sqlite3.Connection, payload: Mapping[str, Any]) -> None:
-    _upsert(conn, "claim_slots", ["claim_id"], CLAIM_SLOT_COLUMNS, payload)
+def upsert_claim_slot(
+    conn: sqlite3.Connection, payload: Mapping[str, Any], *, commit: bool = True
+) -> None:
+    _upsert(conn, "claim_slots", ["claim_id"], CLAIM_SLOT_COLUMNS, payload, commit=commit)
 
 
-def upsert_annotation(conn: sqlite3.Connection, payload: Mapping[str, Any]) -> None:
-    _upsert(conn, "annotations", ["claim_id", "curator"], ANNOTATION_COLUMNS, payload)
+def upsert_annotation(
+    conn: sqlite3.Connection, payload: Mapping[str, Any], *, commit: bool = True
+) -> None:
+    _upsert(
+        conn,
+        "annotations",
+        ["claim_id", "curator"],
+        ANNOTATION_COLUMNS,
+        payload,
+        commit=commit,
+    )
 
 
 def save_adjudication(conn: sqlite3.Connection, payload: Mapping[str, Any]) -> None:
@@ -271,6 +417,34 @@ def save_adjudication(conn: sqlite3.Connection, payload: Mapping[str, Any]) -> N
         """,
         (payload["claim_id"],),
     )
+    conn.commit()
+
+
+def set_annotation_lock(
+    conn: sqlite3.Connection, claim_id: str, curator: str, *, locked: bool
+) -> None:
+    if locked:
+        conn.execute(
+            """
+            UPDATE annotations
+            SET locked = 1,
+                locked_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE claim_id = ? AND curator = ?
+            """,
+            (claim_id, curator),
+        )
+    else:
+        conn.execute(
+            """
+            UPDATE annotations
+            SET locked = 0,
+                locked_at = '',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE claim_id = ? AND curator = ?
+            """,
+            (claim_id, curator),
+        )
     conn.commit()
 
 
@@ -338,18 +512,27 @@ def seed_demo_data(conn: sqlite3.Connection) -> None:
         {
             "claim_id": "D001-C001",
             "paper_id": "D001",
+            "anchor_type": "figure",
+            "anchor_location": "Fig. demo 1A",
+            "anchor_note": "Complete high-confidence demo claim anchor.",
             "slot_note": "Complete high-confidence cytokine claim.",
             "slot_status": "open",
         },
         {
             "claim_id": "D001-C002",
             "paper_id": "D001",
+            "anchor_type": "figure",
+            "anchor_location": "Fig. demo 2A",
+            "anchor_note": "Paired demo disagreement anchor.",
             "slot_note": "Paired annotation with missing dose/speciation and disagreement.",
             "slot_status": "adjudicated",
         },
         {
             "claim_id": "D002-C001",
             "paper_id": "D002",
+            "anchor_type": "results paragraph",
+            "anchor_location": "Results demo paragraph 3",
+            "anchor_note": "Uncertain claim slot anchor.",
             "slot_note": "Uncertain slot used to exercise invalid/low-confidence handling.",
             "slot_status": "uncertain",
         },
@@ -358,6 +541,7 @@ def seed_demo_data(conn: sqlite3.Connection) -> None:
 
     base_complete = {
         "claim_id": "D001-C001",
+        "valid_claim": "yes",
         "metal": "Al",
         "material_form": "hydroxide",
         "speciation_or_oxidation_state": "Al(III)",
@@ -379,6 +563,8 @@ def seed_demo_data(conn: sqlite3.Connection) -> None:
         "missing_core_fields": "",
         "confidence": "high",
         "curator_notes": "Complete demo annotation.",
+        "locked": True,
+        "locked_at": "demo fixture",
         **demo_flags,
     }
     upsert_annotation(conn, {**base_complete, "curator": "JG"})
@@ -387,6 +573,7 @@ def seed_demo_data(conn: sqlite3.Connection) -> None:
     disagreement_a = {
         "claim_id": "D001-C002",
         "curator": "JG",
+        "valid_claim": "yes",
         "metal": "Al",
         "material_form": "hydroxide",
         "speciation_or_oxidation_state": "not reported",
@@ -408,6 +595,8 @@ def seed_demo_data(conn: sqlite3.Connection) -> None:
         "missing_core_fields": ["dose missing", "speciation missing"],
         "confidence": "medium",
         "curator_notes": "Dose and speciation are missing.",
+        "locked": True,
+        "locked_at": "demo fixture",
         **demo_flags,
     }
     disagreement_b = {
@@ -425,6 +614,7 @@ def seed_demo_data(conn: sqlite3.Connection) -> None:
     uncertain = {
         "claim_id": "D002-C001",
         "curator": "JG",
+        "valid_claim": "unsure",
         "metal": "Ni",
         "material_form": "unknown",
         "speciation_or_oxidation_state": "not reported",
@@ -452,6 +642,8 @@ def seed_demo_data(conn: sqlite3.Connection) -> None:
         ],
         "confidence": "low",
         "curator_notes": "Uncertain demo slot.",
+        "locked": True,
+        "locked_at": "demo fixture",
         **demo_flags,
     }
     upsert_annotation(conn, uncertain)
@@ -461,6 +653,7 @@ def seed_demo_data(conn: sqlite3.Connection) -> None:
         {
             "claim_id": "D001-C002",
             "adjudicator": "PI",
+            "final_valid_claim": "yes",
             "final_metal": "Al",
             "final_material_form": "hydroxide",
             "final_speciation_or_oxidation_state": "not reported",
