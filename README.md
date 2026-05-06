@@ -33,9 +33,9 @@ paper registry -> claim slots -> paired annotations -> locked annotations -> adj
 
 ## Curation model
 
-The pilot records are human-adjudicated records generated from two independent AI-assisted curation passes followed by human adjudication.
+The pilot uses two independent AI-assisted curation passes followed by human adjudication.
 
-The app preserves the original annotation records. When an adjudicated record exists, exports use that final record; otherwise, exports fall back to raw annotations for that claim slot.
+Original curator annotations are preserved, and adjudicated records are exported when available. Unadjudicated slots fall back to raw annotation records so incomplete pilot work remains visible rather than hidden.
 
 Demo fixtures are seeded on first run so the workflow is visible immediately. They are excluded from grant-facing metrics and exports by default.
 
@@ -54,9 +54,11 @@ The **Metrics + Export** tab creates a local grant-packet ZIP with:
 - `proposal_summary.md`
 - `README_grant_packet.md`
 
+Demo rows are excluded by default.
+
 The repository does not need to include local SQLite databases or exported packets. Scientific claims should be checked against the exported adjudicated packet, not against demo fixtures or the code alone.
 
-## Installation
+## Run locally
 
 From the repository root:
 
@@ -72,15 +74,17 @@ Streamlit prints a local URL such as `http://localhost:8501`. Open that URL in a
 
 ```bash
 .venv/bin/python -m pytest
-git diff --check
 ```
 
 GitHub Actions runs `pytest` on pushes and pull requests when enabled for the repository.
 
-## Data hygiene
+## Data handling
 
-The working database lives under `data/`, and exports are written locally. Do not commit SQLite databases, export ZIPs or CSVs, PDFs, secrets, or virtual environments. The repo does not require secrets, cloud services, or telemetry.
+- SQLite files live under `data/` and are git-ignored.
+- Exported packets are git-ignored.
+- No secrets, cloud service, or telemetry are required.
+- Do not commit databases, PDFs, exported packets, secrets, or virtual environments.
 
 ## Proposal use
 
-This repo is the software artifact for the pilot curation workflow. The evidence for scientific claims lives in the exported, human-adjudicated grant packet.
+This repository can be cited as the software artifact supporting the preliminary curation workflow. Scientific claims should be checked against the exported adjudicated grant packet, not against demo fixtures.
