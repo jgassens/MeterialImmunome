@@ -1,49 +1,31 @@
 # Metalloimmunome Claim Curation Pilot
 
-This repository contains a local Streamlit + SQLite curation app used to generate preliminary claim-level data for a proposal on context-conditioned metal–immune interactions. The app supports paper registry, shared claim slots, paired curator annotations, annotation locking, adjudication, QA, agreement metrics, and grant-packet export.
+A small local app for turning metal–immune papers into structured, adjudicated claim records. The pilot is built around a simple workflow: register papers, define evidence-anchored claim slots, collect paired annotations, lock records, adjudicate disagreements, check quality, and export a grant-ready packet.
 
 ![Metalloimmunome Knowledge Pipeline](docs/assets/metalloimmunome_knowledge_pipeline.png)
 
-**Figure.** Metalloimmunome knowledge pipeline. Evidence sources are converted into study registry entries and evidence-anchored claim slots, independently curated, human-adjudicated, quality-checked, and used to support knowledge graph construction and trust-calibrated material–immune prediction.
+**Figure.** Evidence sources are converted into study registry entries and evidence-anchored claim slots, independently curated, human-adjudicated, quality-checked, and used to support knowledge graph construction and trust-calibrated material–immune prediction.
 
-## What this is
+## Why this exists
 
-This is a local pilot curation cockpit for preliminary data generation. It helps organize the workflow from paper registry to claim slots, paired annotations, locked annotations, adjudication, QA, metrics, and export.
+Claim-level curation gets messy quickly in spreadsheets. This app keeps the pilot work organized with stable paper records, deterministic claim IDs, controlled labels, locked annotations, adjudication, QA checks, agreement metrics, and local exports.
 
-The app is meant to replace a fragile spreadsheet when claim-level curation needs stable IDs, controlled labels, explicit missingness, preserved raw annotations, and reproducible grant-facing metrics.
+The scientific unit here is a conditional claim: material, form, context, comparator, endpoint, direction, and evidence. That is more useful than a flat statement like "metal X causes immune response Y." The app also makes missingness and provenance explicit, so incomplete reporting becomes measurable instead of disappearing into blank cells.
 
-Demo fixtures are seeded on first run so reviewers can see the workflow immediately. Demo rows are excluded from grant-facing metrics and exports by default.
+## Scope
 
-## What this is not
+This is not the full Metalloimmunome platform. It is a local Streamlit + SQLite curation cockpit for producing auditable pilot records. It does not do PDF ingestion, automatic extraction, hosted deployment, graph storage, or prediction modeling.
 
-This repository is not the full Metalloimmunome platform.
+## Workflow
 
-It is also not:
-
-- a public web service
-- a RAG system
-- a PDF ingestion pipeline
-- a graph database
-- a prediction model
-- an automated literature-mining system
-- a cloud deployment
-- an authentication system
-- a public API
-
-The app does not automatically extract claims from papers. It is a local tool for structured curation and adjudication.
-
-## Pilot workflow
-
-The Streamlit app has six tabs:
+The app has six tabs:
 
 - **Papers**: register papers, track metadata, and import paper-registry CSV files.
-- **Claim Slots**: create shared evidence anchors such as a figure, table, or results paragraph.
-- **Annotate**: enter one structured annotation for one curator and one claim slot, then lock it after checking the primary paper.
-- **Adjudicate**: compare locked paired annotations and save the final human-adjudicated record.
-- **Codebook + QA**: review field definitions, controlled vocabularies, export rules, and data-quality flags.
-- **Metrics + Export**: review pilot metrics, download CSVs, create the grant-packet ZIP, and download a SQLite backup.
-
-The intended workflow is:
+- **Claim Slots**: define the exact figure, table, or text anchor for each claim.
+- **Annotate**: enter one structured annotation for one curator and one claim slot.
+- **Adjudicate**: compare locked paired annotations and save the final record.
+- **Codebook + QA**: check field definitions, controlled labels, and data-quality flags.
+- **Metrics + Export**: review metrics, export CSVs, create the grant packet, and download a SQLite backup.
 
 ```text
 paper registry -> claim slots -> paired annotations -> locked annotations -> adjudication -> QA/metrics/export
@@ -51,23 +33,15 @@ paper registry -> claim slots -> paired annotations -> locked annotations -> adj
 
 ## Curation model
 
-The pilot records are human-adjudicated records generated from two independent AI-assisted curation passes.
+The pilot records are human-adjudicated records generated from two independent AI-assisted curation passes followed by human adjudication.
 
-The curator/adjudicator labels used for the pilot are:
+The app preserves the original annotation records. When an adjudicated record exists, exports use that final record; otherwise, exports fall back to raw annotations for that claim slot.
 
-- `GPT_CURATOR`
-- `CLAUDE_CURATOR`
-- `JG_ADJUDICATOR`
+Demo fixtures are seeded on first run so the workflow is visible immediately. They are excluded from grant-facing metrics and exports by default.
 
-The app preserves original curator annotations and exports adjudicated records when present. If a claim slot has not been adjudicated, exports fall back to raw annotation records for that slot.
+## Grant packet
 
-Do not describe this repository as containing two independent human curators, automated extraction, or a full metalloimmunome dataset unless those exported files are explicitly committed and identified.
-
-## Grant packet outputs
-
-The grant-packet ZIP is generated locally from the **Metrics + Export** tab. Demo rows are excluded by default.
-
-The packet contains:
+The **Metrics + Export** tab creates a local grant-packet ZIP with:
 
 - `curated_claim_records.csv`
 - `paper_registry.csv`
@@ -80,7 +54,7 @@ The packet contains:
 - `proposal_summary.md`
 - `README_grant_packet.md`
 
-The public repository does not need to contain local export ZIPs or SQLite databases. Proposal claims should be based on the exported adjudicated grant packet, not on demo fixtures.
+The repository does not need to include local SQLite databases or exported packets. Scientific claims should be checked against the exported adjudicated packet, not against demo fixtures or the code alone.
 
 ## Installation
 
@@ -92,37 +66,21 @@ python3 -m venv .venv
 ./run-app
 ```
 
-Streamlit prints a local URL such as:
-
-```text
-http://localhost:8501
-```
-
-Open that URL in a browser. On first launch, Streamlit may ask for an onboarding email. Pressing Enter with a blank email is fine.
+Streamlit prints a local URL such as `http://localhost:8501`. Open that URL in a browser. If Streamlit asks for an onboarding email on first launch, pressing Enter with a blank email is fine.
 
 ## Development checks
 
-Run the test suite with:
-
 ```bash
 .venv/bin/python -m pytest
+git diff --check
 ```
 
-GitHub Actions runs `pytest` on pushes and pull requests if enabled for the repository.
+GitHub Actions runs `pytest` on pushes and pull requests when enabled for the repository.
 
-## Data and privacy
+## Data hygiene
 
-The app is local-first.
+The working database lives under `data/`, and exports are written locally. Do not commit SQLite databases, export ZIPs or CSVs, PDFs, secrets, or virtual environments. The repo does not require secrets, cloud services, or telemetry.
 
-- The local SQLite database lives under `data/`.
-- Local SQLite files are ignored by git.
-- Export ZIPs and CSVs are ignored by git.
-- No secrets are required.
-- No cloud service is required.
-- No telemetry is implemented.
+## Proposal use
 
-Do not commit local SQLite databases, exported grant packets, PDFs, secrets, or private curation artifacts unless the project explicitly decides to publish them.
-
-## Citation / proposal use
-
-This repository can be cited in the proposal as the software artifact supporting the preliminary curation workflow. The scientific claims should be based on the exported adjudicated grant packet, not on demo fixtures.
+This repo is the software artifact for the pilot curation workflow. The evidence for scientific claims lives in the exported, human-adjudicated grant packet.
