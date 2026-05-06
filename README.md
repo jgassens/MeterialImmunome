@@ -1,6 +1,10 @@
 # Metalloimmunome Claim Curation Pilot
 
-This repository contains a local Streamlit + SQLite curation app used to generate preliminary claim-level data for a proposal on context-conditioned metal-immune interactions. The app supports paper registry, shared claim slots, paired curator annotations, annotation locking, adjudication, QA, agreement metrics, and grant-packet export.
+This repository contains a local Streamlit + SQLite curation app used to generate preliminary claim-level data for a proposal on context-conditioned metal–immune interactions. The app supports paper registry, shared claim slots, paired curator annotations, annotation locking, adjudication, QA, agreement metrics, and grant-packet export.
+
+![Metalloimmunome Knowledge Pipeline](docs/assets/metalloimmunome_knowledge_pipeline.png)
+
+**Figure.** Metalloimmunome knowledge pipeline. Evidence sources are converted into study registry entries and evidence-anchored claim slots, independently curated, human-adjudicated, quality-checked, and used to support knowledge graph construction and trust-calibrated material–immune prediction.
 
 ## What this is
 
